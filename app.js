@@ -62,15 +62,21 @@ function updateDateDisplay() {
     dateDisplay.textContent = dateStr;
 }
 
+function getLocalISODate(date) {
+    const offset = date.getTimezoneOffset();
+    const localDate = new Date(date.getTime() - (offset * 60000));
+    return localDate.toISOString().split('T')[0];
+}
+
 function getStorageKey(date) {
-    return `gym_log_${date.toISOString().split('T')[0]}`;
+    return `gym_log_${getLocalISODate(date)}`;
 }
 
 function loadRoutine() {
     container.innerHTML = '';
     const day = currentDate.getDay();
     const routine = ROUTINE[day];
-    
+
     // Recuperar datos guardados
     const storageKey = getStorageKey(currentDate);
     const savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -87,7 +93,7 @@ function loadRoutine() {
     }
 
     dayHeader.textContent = routine.title;
-    
+
     routine.exercises.forEach(ex => {
         const card = createExerciseCard(ex, savedData[ex.id] || {});
         container.appendChild(card);
@@ -97,14 +103,14 @@ function loadRoutine() {
 function createExerciseCard(exercise, savedExData) {
     const card = document.createElement('div');
     card.className = 'exercise-card';
-    
+
     let setsHtml = '';
     for (let i = 1; i <= exercise.sets; i++) {
         const savedSet = savedExData[i] || {};
         const repsVal = savedSet.reps || '';
         const weightVal = savedSet.weight || '';
         const isDone = !!savedSet.done;
-        
+
         setsHtml += `
             <div class="set-row">
                 <span class="set-number">#${i}</span>
@@ -150,74 +156,81 @@ function createExerciseCard(exercise, savedExData) {
 function saveData(exId, setIdx, field, value) {
     const storageKey = getStorageKey(currentDate);
     const data = JSON.parse(localStorage.getItem(storageKey) || '{}');
-    
+
     if (!data[exId]) data[exId] = {};
     if (!data[exId][setIdx]) data[exId][setIdx] = {};
-    
+
     data[exId][setIdx][field] = value;
-    
-    // Auto-mark as done if both fields filled
+
     if (data[exId][setIdx].reps && data[exId][setIdx].weight) {
         data[exId][setIdx].done = true;
-        // Update UI logic for check button would require re-select specific element
-        // Simplification: We rely on manual check toggling or reload for visual update
     }
-    
+
     localStorage.setItem(storageKey, JSON.stringify(data));
 }
 
 function toggleSet(exId, setIdx, btn) {
     const storageKey = getStorageKey(currentDate);
     const data = JSON.parse(localStorage.getItem(storageKey) || '{}');
-    
+
     if (!data[exId]) data[exId] = {};
     if (!data[exId][setIdx]) data[exId][setIdx] = {};
-    
+
     const newState = !data[exId][setIdx].done;
     data[exId][setIdx].done = newState;
-    
+
     localStorage.setItem(storageKey, JSON.stringify(data));
-    
+
     if (newState) btn.classList.add('completed');
     else btn.classList.remove('completed');
 }
 
 function exportCSV() {
-    let csvContent = "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg)\n";
-    
-    // Iterar todas las claves de localStorage que coincidan con nuestra app
-    Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('gym_log_')) {
-            const dateStr = key.replace('gym_log_', '');
-            const data = JSON.parse(localStorage.getItem(key));
-            
-            // Buscar nombres de ejercicios
-            Object.keys(data).forEach(exId => {
-                const sets = data[exId];
-                let exName = exId; // Fallback
-                
-                // Buscar nombre real
-                [1, 3, 5].forEach(d => {
-                    const found = ROUTINE[d]?.exercises.find(e => e.id === exId);
-                    if (found) exName = found.name;
-                });
+    let csvRows = [];
+    const header = "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg)";
 
-                Object.keys(sets).forEach(setIdx => {
-                    const s = sets[setIdx];
-                    if (s.reps || s.weight) {
-                        csvContent += `${dateStr},"${exName}",${setIdx},${s.reps || 0},${s.weight || 0}\n`;
-                    }
-                });
+    // Obtener y ordenar claves por fecha
+    const keys = Object.keys(localStorage)
+        .filter(k => k.startsWith('gym_log_'))
+        .sort(); // Orden alfabético funciona bien con YYYY-MM-DD
+
+    keys.forEach(key => {
+        const dateStr = key.replace('gym_log_', '');
+        const data = JSON.parse(localStorage.getItem(key));
+
+        // Buscar nombres de ejercicios
+        Object.keys(data).forEach(exId => {
+            const sets = data[exId];
+            let exName = exId; // Fallback
+
+            // Buscar nombre real en la configuración (Rutina)
+            [1, 3, 5].forEach(d => {
+                const found = ROUTINE[d]?.exercises.find(e => e.id === exId);
+                if (found) exName = found.name;
             });
-        }
+
+            Object.keys(sets).forEach(setIdx => {
+                const s = sets[setIdx];
+                // Exportar si tiene datos o está marcado como hecho
+                if (s.reps || s.weight || s.done) {
+                    csvRows.push(`${dateStr},"${exName}",${setIdx},${s.reps || 0},${s.weight || 0}`);
+                }
+            });
+        });
     });
 
+    if (csvRows.length === 0) {
+        alert("No hay datos guardados para exportar.");
+        return;
+    }
+
+    const csvContent = header + "\n" + csvRows.join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
-    
+
     link.setAttribute("href", url);
-    link.setAttribute("download", `gym_tracker_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `gym_export_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
