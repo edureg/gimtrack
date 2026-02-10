@@ -1,0 +1,146 @@
+// Mock localStorage
+const localStorageMock = {
+store: {},
+getItem: function(key) { return this.store[key] || null; },
+setItem: function(key, value) { this.store[key] = value.toString(); },
+clear: function() { this.store = {}; },
+store_keys: function() { return Object.keys(this.store); }
+};
+// Override global localStorage
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
+// ---- COPIAR LÓGICA DE app.js (getLastSessionData y getDayName) ----
+function getLastSessionData(exerciseId, mockToday) {
+const today = mockToday || new Date();
+today.setHours(0, 0, 0, 0);
+
+const keys = localStorage.store_keys()
+.filter(k => k.startsWith('gym_log_'));
+
+const history = [];
+keys.forEach(key => {
+const dateStr = key.replace('gym_log_', '');
+const parts = dateStr.split('-');
+const date = new Date(parts[0], parts[1] - 1, parts[2]);
+history.push({ date: date, key: key, dateStr: dateStr });
+});
+
+const pastSessions = history
+.filter(h => h.date < today) .sort((a, b)=> b.date - a.date);
+
+    const currentDayOfWeek = today.getDay();
+
+    // 1. Mismo día de la semana
+    for (const session of pastSessions) {
+    if (session.date.getDay() === currentDayOfWeek) {
+    const data = JSON.parse(localStorage.getItem(session.key) || '{}');
+    if (data[exerciseId]) {
+    const exData = data[exerciseId];
+    const hasContent = Object.values(exData).some(s => s.weight || s.reps);
+    if (hasContent) {
+    return { date: session.dateStr, ...exData };
+    }
+    }
+    }
+    }
+
+    // 2. Fallback
+    for (const session of pastSessions) {
+    if (session.date.getDay() !== currentDayOfWeek) {
+    const data = JSON.parse(localStorage.getItem(session.key) || '{}');
+    if (data[exerciseId]) {
+    const exData = data[exerciseId];
+    const hasContent = Object.values(exData).some(s => s.weight || s.reps);
+    if (hasContent) {
+    return { date: session.dateStr + ' (' + getDayName(session.date.getDay()) + ')', ...exData };
+    }
+    }
+    }
+    }
+    return null;
+    }
+
+    function getDayName(dayIndex) {
+    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    return days[dayIndex];
+    }
+
+    // ---- POPULATE DATA FROM CSV MANUALLY ----
+    // CSV Content:
+    // 2026-02-02 (Lun): Press Plano, Press Inclinado...
+    // 2026-02-04 (Mié): Prensa, Sillón Isquio, Gemelos...
+    // 2026-02-06 (Vie): Jalón, Serrucho...
+    // 2026-02-09 (Lun): Press Plano, Press Inclinado...
+
+    function populateData() {
+    // 2026-02-02 - Monday
+    const dataFeb02 = {
+    "pecho_press_plano": {
+    1: { weight: 7.5, reps: 12 },
+    2: { weight: 10, reps: 8 },
+    3: { weight: 15, reps: 8 },
+    4: { weight: 17.5, reps: 6 }
+    }
+    // ... omitted others for brevity, focusing on chest
+    };
+    localStorage.setItem("gym_log_2026-02-02", JSON.stringify(dataFeb02));
+
+    // 2026-02-09 - Monday (Next week)
+    const dataFeb09 = {
+    "pecho_press_plano": {
+    1: { weight: 17.5, reps: 6 },
+    2: { weight: 17.5, reps: 6 },
+    3: { weight: 20, reps: 6 },
+    4: { weight: 20, reps: 5 }
+    }
+    };
+    localStorage.setItem("gym_log_2026-02-09", JSON.stringify(dataFeb09));
+    }
+
+    // ---- EXECUTE TESTS ----
+    function runTest() {
+    const resultsDiv = document.getElementById('results');
+    function log(msg, color) {
+    const d = document.createElement('div');
+    d.textContent = msg;
+    if(color) d.style.color = color;
+    resultsDiv.appendChild(d);
+    }
+
+    populateData();
+
+    // Scenario 1: It's Monday 2026-02-09. I want to see what I did on Monday 2026-02-02.
+    // NOTE: logic filters sessions STRICTLY BEFORE today.
+    const today = new Date(2026, 1, 9); // Feb 9th 2026
+    const exId = "pecho_press_plano";
+
+    // Last session data should be Feb 02
+    const result = getLastSessionData(exId, today);
+
+    if (result) {
+    if (result.date === "2026-02-02") {
+    log("SUCCESS: Retrieves 2026-02-02 for 2026-02-09", "green");
+    log("Data: " + JSON.stringify(result));
+    } else {
+    log("FAILURE: Expected 2026-02-02 but got " + result.date, "red");
+    }
+    } else {
+    log("FAILURE: No data found", "red");
+    }
+
+    // Scenario 2: It's Monday 2026-02-16. I should see Feb 09.
+    const nextWeek = new Date(2026, 1, 16);
+    const result2 = getLastSessionData(exId, nextWeek);
+    if (result2) {
+    if (result2.date === "2026-02-09") {
+    log("SUCCESS: Retrieves 2026-02-09 for 2026-02-16", "green");
+    } else {
+    log("FAILURE: Expected 2026-02-09 but got " + result.date, "red");
+    }
+    } else {
+    log("FAILURE: No data found for next week", "red");
+    }
+    }
+
+    // Run immediately
+    runTest();

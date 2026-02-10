@@ -33,6 +33,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+    // ESTRATEGIA DE DEBUGGING: Network Only (Bypass Cache temporariamente)
+    // Esto obliga a descargar siempre los archivos nuevos.
+    console.log('[ServiceWorker] Fetching (Network Only):', event.request.url);
+    event.respondWith(fetch(event.request));
+
+    /*
     event.respondWith(
         caches.match(event.request)
             .then((response) => {
@@ -40,4 +46,5 @@ self.addEventListener('fetch', (event) => {
                 return response || fetch(event.request);
             })
     );
+    */
 });
