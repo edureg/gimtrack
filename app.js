@@ -104,12 +104,28 @@ function createExerciseCard(exercise, savedExData) {
     const card = document.createElement('div');
     card.className = 'exercise-card';
 
+    // Obtener datos de la sesión anterior
+    const lastSessionData = getLastSessionData(exercise.id);
+
     let setsHtml = '';
     for (let i = 1; i <= exercise.sets; i++) {
         const savedSet = savedExData[i] || {};
         const repsVal = savedSet.reps || '';
         const weightVal = savedSet.weight || '';
         const isDone = !!savedSet.done;
+
+        // Datos históricos para esta serie (o general si no hay por serie)
+        // Intentamos buscar por número de serie, si no, mostramos el último registrado.
+        // Pero para simplificar y ser útil, buscamos si hubo un set i en la sesión anterior.
+        let historyText = '';
+        if (lastSessionData && lastSessionData[i]) {
+            const prev = lastSessionData[i];
+            if (prev.weight || prev.reps) {
+                historyText = `<div class="history-info" title="Sesión anterior: ${lastSessionData.date}">
+                                <i class="fas fa-history"></i> ${prev.weight || '-'}kg x ${prev.reps || '-'}
+                               </div>`;
+            }
+        }
 
         setsHtml += `
             <div class="set-row">
@@ -137,6 +153,7 @@ function createExerciseCard(exercise, savedExData) {
                     <i class="fas fa-check"></i>
                 </button>
             </div>
+            ${historyText}
         `;
     }
 
@@ -144,6 +161,7 @@ function createExerciseCard(exercise, savedExData) {
         <div class="exercise-header">
             <div class="exercise-name">${exercise.name}</div>
             <div class="exercise-notes">${exercise.notes}</div>
+            ${lastSessionData ? `<div class="last-session-date">Ult. vez: ${lastSessionData.date}</div>` : ''}
         </div>
         <div class="sets-container">
             ${setsHtml}
@@ -235,4 +253,91 @@ function exportCSV() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+function getLastSessionData(exerciseId) {
+    const today = new Date();
+    // Normalizamos 'today' para que sea al inicio del día para comparaciones correctas
+    today.setHours(0, 0, 0, 0);
+
+    const keys = Object.keys(localStorage)
+        .filter(k => k.startsWith('gym_log_'));
+
+    const history = [];
+    keys.forEach(key => {
+        const dateStr = key.replace('gym_log_', '');
+        const parts = dateStr.split('-');
+        // Crear fecha local correctamente (año, mes base 0, dia)
+        const date = new Date(parts[0], parts[1] - 1, parts[2]);
+        history.push({ date: date, key: key, dateStr: dateStr });
+    });
+
+    // 1. Filtrar sesiones anteriores a hoy
+    // NO filtramos por día de la semana primero, para poder hacer fallback
+    // Queremos buscar:
+    // a) La última vez que hice este ejercicio un día igual a hoy (ej. Miércoles pasado)
+    // b) Si no hay, la última vez que hice este ejercicio CUALQUIER día.
+
+    // CORRECCIÓN SEGÚN REQUERIMIENTO: "Es importante que NO pierda la informacion que ya tengo registrada. La idea es tener esa referencia... En el supuesto caso de que el valor de la semana anterior no este disponible... debe traer el primer valor inmediatamente anterior."
+
+    // Vamos a buscar TODAS las sesiones anteriores ordenadas por fecha descendente
+    const pastSessions = history
+        .filter(h => h.date < today)
+        .sort((a, b) => b.date - a.date);
+
+    // Estrategia:
+    // 1. Buscar coincidencias exactas de día de la semana (prioridad 1)
+    const currentDayOfWeek = today.getDay();
+
+    // Buscamos en orden descendente una sesión del MISMO día de la semana que tenga datos para este ejercicio
+    for (const session of pastSessions) {
+        if (session.date.getDay() === currentDayOfWeek) {
+            const data = JSON.parse(localStorage.getItem(session.key) || '{}');
+            if (data[exerciseId]) {
+                const exData = data[exerciseId];
+                // Verificar que tenga algo relevante (algún peso o rep)
+                const hasContent = Object.values(exData).some(s => s.weight || s.reps);
+                if (hasContent) {
+                    return { date: session.dateStr, ...exData };
+                }
+            }
+        }
+    }
+
+    // Si llegamos acá, no encontramos entrenamiento de este ejercicio en el mismo día de la semana (ej. nunca entrené un miércoles antes, o salté muchos miércoles).V
+    // El requerimiento dice: "debe traer el primer valor inmediatamente anterior".
+    // Esto podría interpretarse como CUALQUIER sesión anterior de este ejercicio, o seguir buscando semanas atrás.
+    // Mi lógica de "validSessions" arriba ya recorre TODA la historia hacia atrás buscando el mismo día.
+    // Si no encontró nada, ¿buscamos el último registro GLOBAL de ese ejercicio?
+    // Ejemplo: Hoy es Miércoles (Pierna). El Miércoles pasado no fui. El anterior tampoco.
+    // El loop de arriba ya cubrió "dos semanas atrás" y "tres semanas atrás", siempre que sea Miércoles.
+
+    // Si NUNCA hice piernas un miércoles (quizás antes iba los jueves), ¿debería mostrar lo del jueves?
+    // El prompt dice: "Ejemplo: un miercoles, los valores para cada ejercicio del miercoles anterior... En el supuesto caso... debe traer el primer valor inmediagamente anterior."
+    // Asumiré que se refiere al historial cronológico puro si no hay coincidencia de día, O simplemente que siga buscando atrás en el tiempo (lo cual ya hace el loop).
+
+    // Vamos a agregar un fallback: Si no hay match de día de semana, mostrar la ÚLTIMA vez que se hizo el ejercicio, sea el día que sea.
+    // Esto es útil si cambié mi rutina de días.
+
+    for (const session of pastSessions) {
+        // Ya buscamos por día de semana arriba, ahora buscamos cualquiera
+        // Pero para no repetir, solo buscamos si NO es el mismo día (aunque si fuera el mismo día ya lo hubiéramos encontrado arriba, así que da igual)
+        if (session.date.getDay() !== currentDayOfWeek) {
+            const data = JSON.parse(localStorage.getItem(session.key) || '{}');
+            if (data[exerciseId]) {
+                const exData = data[exerciseId];
+                const hasContent = Object.values(exData).some(s => s.weight || s.reps);
+                if (hasContent) {
+                    return { date: session.dateStr + ' (' + getDayName(session.date.getDay()) + ')', ...exData };
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+function getDayName(dayIndex) {
+    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    return days[dayIndex];
 }

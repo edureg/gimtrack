@@ -4,7 +4,8 @@
     --card-border: 1px solid rgba(255, 255, 255, 0.1);
     --text-primary: #ffffff;
     --text-secondary: #a0a0a0;
-    --accent-color: #00ff88; /* Neon Green */
+    --accent-color: #00ff88;
+    /* Neon Green */
     --accent-glow: 0 0 10px rgba(0, 255, 136, 0.4);
     --danger-color: #ff4d4d;
     --glass-effect: blur(10px);
@@ -25,7 +26,7 @@ body {
     font-family: var(--font-main);
     min-height: 100vh;
     padding: 20px 16px;
-    background-image: 
+    background-image:
         radial-gradient(circle at 10% 20%, rgba(0, 255, 136, 0.05) 0%, transparent 20%),
         radial-gradient(circle at 90% 80%, rgba(0, 102, 255, 0.05) 0%, transparent 20%);
 }
@@ -50,6 +51,7 @@ h1 {
     letter-spacing: -0.5px;
     background: linear-gradient(to right, #fff, #bbb);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -236,8 +238,15 @@ h1 {
 
 /* Animations */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .exercise-card {
@@ -245,8 +254,39 @@ h1 {
 }
 
 /* Helper for inputs type number */
-input[type=number]::-webkit-inner-spin-button, 
-input[type=number]::-webkit-outer-spin-button { 
-  -webkit-appearance: none; 
-  margin: 0; 
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* History Stuff */
+.last-session-date {
+    font-size: 0.8rem;
+    color: var(--accent-color);
+    margin-top: 4px;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.history-info {
+    grid-column: 1 / -1;
+    /* Ocupa todo el ancho debajo de la fila */
+    text-align: right;
+    font-size: 0.75rem;
+    color: #888;
+    margin-top: -8px;
+    /* Pegadito al input */
+    margin-bottom: 8px;
+    /* Espacio antes del siguiente set */
+    margin-right: 46px;
+    /* Alinear visualmente con los inputs, esquivar el check */
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+}
+
+.history-info i {
+    font-size: 0.7rem;
 }
