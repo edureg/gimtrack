@@ -133,8 +133,8 @@ h1 {
 
 .set-row {
     display: grid;
-    grid-template-columns: 30px 1fr 1fr 40px;
-    gap: 10px;
+    grid-template-columns: 30px 1fr 1fr 1fr 40px;
+    gap: 8px;
     align-items: center;
 }
 
@@ -279,7 +279,7 @@ input[type=number]::-webkit-outer-spin-button {
     /* Pegadito al input */
     margin-bottom: 8px;
     /* Espacio antes del siguiente set */
-    margin-right: 46px;
+    margin-right: 42px;
     /* Alinear visualmente con los inputs, esquivar el check */
     display: flex;
     justify-content: flex-end;

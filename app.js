@@ -73,10 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('nextDay').addEventListener('click', () => changeDate(1));
     document.getElementById('exportBtn').addEventListener('click', exportCSV);
 
-    document.getElementById('addExerciseBtn').addEventListener('click', showAddExerciseModal);
-    document.getElementById('cancelAddEx').addEventListener('click', hideAddExerciseModal);
     document.getElementById('confirmAddEx').addEventListener('click', confirmAddExercise);
     document.getElementById('toggleEditModeBtn').addEventListener('click', toggleEditMode);
+    document.getElementById('importFile').addEventListener('change', importCSV);
 });
 
 function toggleEditMode() {
@@ -93,6 +92,9 @@ function toggleEditMode() {
         btn.style.color = '';
         btn.style.borderColor = '';
     }
+
+    // Toggle Import Button
+    document.getElementById('importContainer').style.display = isEditMode ? 'block' : 'none';
 }
 
 function changeDate(days) {
@@ -157,6 +159,7 @@ function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
         const savedSet = savedExData[i] || {};
         const repsVal = savedSet.reps || '';
         const weightVal = savedSet.weight || '';
+        const timeVal = savedSet.time || '';
         const isDone = !!savedSet.done;
 
         // Datos históricos para esta serie (o general si no hay por serie)
@@ -165,9 +168,14 @@ function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
         let historyText = '';
         if (lastSessionData && lastSessionData[i]) {
             const prev = lastSessionData[i];
-            if (prev.weight || prev.reps) {
+            if (prev.weight || prev.reps || prev.time) {
+                let textElements = [];
+                if (prev.weight) textElements.push(`${prev.weight}kg`);
+                if (prev.reps) textElements.push(`${prev.reps} reps`);
+                if (prev.time) textElements.push(`${prev.time}s`);
+
                 historyText = `<div class="history-info" title="Sesión anterior: ${lastSessionData.date}">
-                                <i class="fas fa-history"></i> ${prev.weight || '-'}kg x ${prev.reps || '-'}
+                                <i class="fas fa-history"></i> ${textElements.join(' - ')}
                                </div>`;
             }
         }
@@ -192,6 +200,15 @@ function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
                         data-set="${i}"
                         onchange="saveData('${exercise.id}', ${i}, 'weight', this.value)">
                     <label>Kg</label>
+                </div>
+                <div class="input-group">
+                    <input type="number" placeholder="-" 
+                        value="${timeVal}" 
+                        data-type="time"
+                        data-ex="${exercise.id}" 
+                        data-set="${i}"
+                        onchange="saveData('${exercise.id}', ${i}, 'time', this.value)">
+                    <label>Segs</label>
                 </div>
                 <button class="check-btn ${isDone ? 'completed' : ''}" 
                     onclick="toggleSet('${exercise.id}', ${i}, this)">
@@ -233,7 +250,7 @@ function saveData(exId, setIdx, field, value) {
 
     data[exId][setIdx][field] = value;
 
-    if (data[exId][setIdx].reps && data[exId][setIdx].weight) {
+    if (data[exId][setIdx].reps || data[exId][setIdx].weight || data[exId][setIdx].time) {
         data[exId][setIdx].done = true;
     }
 
@@ -258,7 +275,7 @@ function toggleSet(exId, setIdx, btn) {
 
 function exportCSV() {
     let csvRows = [];
-    const header = "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg)";
+    const header = "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg),Tiempo (s)";
 
     // Obtener y ordenar claves por fecha
     const keys = Object.keys(localStorage)
@@ -285,8 +302,8 @@ function exportCSV() {
             Object.keys(sets).forEach(setIdx => {
                 const s = sets[setIdx];
                 // Exportar si tiene datos o está marcado como hecho
-                if (s.reps || s.weight || s.done) {
-                    csvRows.push(`${dateStr},"${exName}",${setIdx},${s.reps || 0},${s.weight || 0}`);
+                if (s.reps || s.weight || s.time || s.done) {
+                    csvRows.push(`${dateStr},"${exName}",${setIdx},${s.reps || 0},${s.weight || 0},${s.time || 0}`);
                 }
             });
         });
@@ -310,9 +327,109 @@ function exportCSV() {
     document.body.removeChild(link);
 }
 
+function importCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const text = e.target.result;
+        const lines = text.split('\n');
+
+        // Verifica que tenga la cabecera correcta o al menos datos
+        if (lines.length < 2) {
+            alert('El archivo no parece ser un CSV válido o está vacío.');
+            return;
+        }
+
+        let importedCount = 0;
+
+        // Comenzar desde 1 para saltear la cabecera "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg)"
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            // Manejar comillas en caso de nombres de ejercicios con comas
+            // Un split simple por coma falla si el ejercicio se llama "Prensa, 45"
+            // Expresión regular para parsear CSV básico:
+            const regex = /(".*?"|[^",\s]+)(?=\s*,|\s*$)/g;
+            let matches = line.match(regex);
+
+            if (!matches) {
+                // Fallback a split simple si la regex falla
+                matches = line.split(',');
+            }
+
+            // Limpiar comillas de los valores
+            matches = matches.map(m => m.replace(/^"|"$/g, ''));
+
+            if (matches.length >= 5) {
+                const dateStr = matches[0];
+                const exName = matches[1];
+                const setIdx = parseInt(matches[2]);
+                const reps = parseInt(matches[3]);
+                const weight = parseFloat(matches[4]);
+                const time = matches.length >= 6 ? parseInt(matches[5]) : 0;
+
+                // Necesitamos el ID del ejercicio. Como el CSV solo exporta el nombre, 
+                // debemos buscar a qué ID corresponde ese nombre en la configuración.
+                let exId = null;
+                [0, 1, 2, 3, 4, 5, 6].forEach(d => {
+                    const found = currentRoutine[d]?.exercises?.find(ex => ex.name === exName);
+                    if (found) exId = found.id;
+                });
+
+                // Si no lo encontramos en la rutina actual (quizás lo borró), intentemos buscar en la original
+                if (!exId) {
+                    [1, 3, 5].forEach(d => {
+                        const found = ROUTINE[d]?.exercises?.find(ex => ex.name === exName);
+                        if (found) exId = found.id;
+                    });
+                }
+
+                // Si definitivamente no existe el ID, creamos un ID genérico basado en el nombre
+                if (!exId) {
+                    exId = exName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                }
+
+                const storageKey = `gym_log_${dateStr}`;
+                const data = JSON.parse(localStorage.getItem(storageKey) || '{}');
+
+                if (!data[exId]) data[exId] = {};
+                if (!data[exId][setIdx]) data[exId][setIdx] = {};
+
+                // Solo sobreescribir si NO hay datos previamente cargados (para no duplicar o borrar progreso actual en caso de conflicto)
+                // Opcional: Podríamos sobreescribir siempre, pero para más seguridad y "no duplicar/pisar" información:
+                const existing = data[exId][setIdx];
+                if (!existing.reps && !existing.weight && !existing.time && !existing.done) {
+                    data[exId][setIdx] = {
+                        reps: reps || '',
+                        weight: weight || '',
+                        time: time || '',
+                        done: (reps > 0 || weight > 0 || time > 0)
+                    };
+                    localStorage.setItem(storageKey, JSON.stringify(data));
+                    importedCount++;
+                }
+            }
+        }
+
+        alert(`¡Importación finalizada! Se restauraron o añadieron ${importedCount} series al historial.`);
+        event.target.value = ''; // Reset input
+        loadRoutine(); // Recargar UI por si afectó al día de hoy
+    };
+
+    reader.onerror = function () {
+        alert('Error al leer el archivo.');
+    };
+
+    reader.readAsText(file);
+}
+
 function getLastSessionData(exerciseId) {
-    const today = new Date();
-    // Normalizamos 'today' para que sea al inicio del día para comparaciones correctas
+    // Utilizamos currentDate (el día seleccionado en pantalla) en lugar del día real
+    const today = new Date(currentDate);
+    // Normalizamos para comparaciones correctas
     today.setHours(0, 0, 0, 0);
 
     const keys = Object.keys(localStorage)
@@ -351,7 +468,7 @@ function getLastSessionData(exerciseId) {
             if (data[exerciseId]) {
                 const exData = data[exerciseId];
                 // Verificar que tenga algo relevante (algún peso o rep)
-                const hasContent = Object.values(exData).some(s => s.weight || s.reps);
+                const hasContent = Object.values(exData).some(s => s.weight || s.reps || s.time);
                 if (hasContent) {
                     return { date: session.dateStr, ...exData };
                 }
@@ -381,7 +498,7 @@ function getLastSessionData(exerciseId) {
             const data = JSON.parse(localStorage.getItem(session.key) || '{}');
             if (data[exerciseId]) {
                 const exData = data[exerciseId];
-                const hasContent = Object.values(exData).some(s => s.weight || s.reps);
+                const hasContent = Object.values(exData).some(s => s.weight || s.reps || s.time);
                 if (hasContent) {
                     return { date: session.dateStr + ' (' + getDayName(session.date.getDay()) + ')', ...exData };
                 }
