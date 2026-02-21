@@ -38,16 +38,62 @@ let currentDate = new Date();
 const container = document.getElementById('exercises-container');
 const dateDisplay = document.getElementById('currentDateDisplay');
 const dayHeader = document.getElementById('day-header');
+let currentRoutine = {};
+let isEditMode = false;
+
+function initRoutine() {
+    const saved = localStorage.getItem('gym_custom_routine');
+    if (saved) {
+        currentRoutine = JSON.parse(saved);
+    } else {
+        for (let i = 0; i <= 6; i++) {
+            if (ROUTINE[i]) {
+                currentRoutine[i] = JSON.parse(JSON.stringify(ROUTINE[i]));
+            } else {
+                const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+                currentRoutine[i] = { title: days[i], exercises: [] };
+            }
+        }
+        localStorage.setItem('gym_custom_routine', JSON.stringify(currentRoutine));
+    }
+}
+
+function saveCurrentRoutine() {
+    localStorage.setItem('gym_custom_routine', JSON.stringify(currentRoutine));
+    loadRoutine();
+}
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
+    initRoutine();
     updateDateDisplay();
     loadRoutine();
 
     document.getElementById('prevDay').addEventListener('click', () => changeDate(-1));
     document.getElementById('nextDay').addEventListener('click', () => changeDate(1));
     document.getElementById('exportBtn').addEventListener('click', exportCSV);
+
+    document.getElementById('addExerciseBtn').addEventListener('click', showAddExerciseModal);
+    document.getElementById('cancelAddEx').addEventListener('click', hideAddExerciseModal);
+    document.getElementById('confirmAddEx').addEventListener('click', confirmAddExercise);
+    document.getElementById('toggleEditModeBtn').addEventListener('click', toggleEditMode);
 });
+
+function toggleEditMode() {
+    isEditMode = !isEditMode;
+    document.body.classList.toggle('edit-mode-active', isEditMode);
+
+    const btn = document.getElementById('toggleEditModeBtn');
+    if (isEditMode) {
+        btn.innerHTML = '<i class="fas fa-lock"></i> Finalizar Configuración';
+        btn.style.color = 'var(--danger-color)';
+        btn.style.borderColor = 'var(--danger-color)';
+    } else {
+        btn.innerHTML = '<i class="fas fa-unlock"></i> Configurar Rutina';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+    }
+}
 
 function changeDate(days) {
     currentDate.setDate(currentDate.getDate() + days);
@@ -75,32 +121,31 @@ function getStorageKey(date) {
 function loadRoutine() {
     container.innerHTML = '';
     const day = currentDate.getDay();
-    const routine = ROUTINE[day];
+    const routine = currentRoutine[day];
 
     // Recuperar datos guardados
     const storageKey = getStorageKey(currentDate);
     const savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
 
-    if (!routine) {
-        dayHeader.textContent = "Día de Descanso (o cardio opcional)";
+    if (!routine || !routine.exercises || routine.exercises.length === 0) {
+        dayHeader.textContent = routine ? routine.title : "Día de Descanso";
         container.innerHTML = `
             <div class="empty-state">
-                <i class="fas fa-bed" style="font-size: 3rem; margin-bottom: 20px; color: #444;"></i>
-                <p>No hay rutina programada para hoy.</p>
-                <p style="font-size: 0.9rem; margin-top: 10px;">¡Buen momento para recuperar energía!</p>
+                <i class="fas fa-dumbbell" style="font-size: 3rem; margin-bottom: 20px; color: #444;"></i>
+                <p>No hay ejercicios programados para hoy.</p>
             </div>`;
         return;
     }
 
     dayHeader.textContent = routine.title;
 
-    routine.exercises.forEach(ex => {
-        const card = createExerciseCard(ex, savedData[ex.id] || {});
+    routine.exercises.forEach((ex, idx) => {
+        const card = createExerciseCard(ex, savedData[ex.id] || {}, day, idx);
         container.appendChild(card);
     });
 }
 
-function createExerciseCard(exercise, savedExData) {
+function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
     const card = document.createElement('div');
     card.className = 'exercise-card';
 
@@ -159,9 +204,17 @@ function createExerciseCard(exercise, savedExData) {
 
     card.innerHTML = `
         <div class="exercise-header">
-            <div class="exercise-name">${exercise.name}</div>
-            <div class="exercise-notes">${exercise.notes}</div>
+            <div class="exercise-header-top">
+                <div class="exercise-name">${exercise.name}</div>
+                <button class="delete-ex-btn" title="Eliminar Ejercicio" onclick="deleteExercise(${dayIndex}, ${exIndex})"><i class="fas fa-trash"></i></button>
+            </div>
+            ${exercise.notes ? `<div class="exercise-notes">${exercise.notes}</div>` : ''}
             ${lastSessionData ? `<div class="last-session-date">Ult. vez: ${lastSessionData.date}</div>` : ''}
+        </div>
+        <div class="sets-controls">
+            <button class="sets-btn" onclick="changeSets(${dayIndex}, ${exIndex}, -1)"><i class="fas fa-minus"></i></button>
+            <span class="sets-label">${exercise.sets} Series</span>
+            <button class="sets-btn" onclick="changeSets(${dayIndex}, ${exIndex}, 1)"><i class="fas fa-plus"></i></button>
         </div>
         <div class="sets-container">
             ${setsHtml}
@@ -221,10 +274,12 @@ function exportCSV() {
             const sets = data[exId];
             let exName = exId; // Fallback
 
-            // Buscar nombre real en la configuración (Rutina)
-            [1, 3, 5].forEach(d => {
-                const found = ROUTINE[d]?.exercises.find(e => e.id === exId);
-                if (found) exName = found.name;
+            // Buscar nombre real en la configuración actual o en la original
+            [0, 1, 2, 3, 4, 5, 6].forEach(d => {
+                const foundInCurrent = currentRoutine[d]?.exercises?.find(e => e.id === exId);
+                const foundInOriginal = ROUTINE[d] ? ROUTINE[d].exercises?.find(e => e.id === exId) : null;
+                if (foundInCurrent) exName = foundInCurrent.name;
+                else if (foundInOriginal && exName === exId) exName = foundInOriginal.name;
             });
 
             Object.keys(sets).forEach(setIdx => {
@@ -340,4 +395,60 @@ function getLastSessionData(exerciseId) {
 function getDayName(dayIndex) {
     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     return days[dayIndex];
+}
+
+// Lógica de Edición de Rutinas
+function deleteExercise(dayIndex, exIndex) {
+    if (confirm("¿Seguro que deseas eliminar este ejercicio de la rutina del día?")) {
+        currentRoutine[dayIndex].exercises.splice(exIndex, 1);
+        saveCurrentRoutine();
+    }
+}
+
+function changeSets(dayIndex, exIndex, delta) {
+    const ex = currentRoutine[dayIndex].exercises[exIndex];
+    if (ex.sets + delta >= 1) {
+        ex.sets += delta;
+        saveCurrentRoutine();
+    }
+}
+
+function showAddExerciseModal() {
+    document.getElementById('newExName').value = '';
+    document.getElementById('newExNotes').value = '';
+    document.getElementById('newExSets').value = '4';
+    document.getElementById('addExerciseModal').style.display = 'flex';
+}
+
+function hideAddExerciseModal() {
+    document.getElementById('addExerciseModal').style.display = 'none';
+}
+
+function confirmAddExercise() {
+    const name = document.getElementById('newExName').value.trim();
+    const notes = document.getElementById('newExNotes').value.trim();
+    const sets = parseInt(document.getElementById('newExSets').value) || 4;
+
+    if (!name) {
+        alert("El nombre del ejercicio es obligatorio.");
+        return;
+    }
+
+    const day = currentDate.getDay();
+    const newId = 'custom_' + Date.now();
+
+    if (!currentRoutine[day].exercises) {
+        currentRoutine[day].exercises = [];
+    }
+
+    currentRoutine[day].exercises.push({
+        id: newId,
+        name: name,
+        notes: notes,
+        sets: sets,
+        rephs: "-"
+    });
+
+    saveCurrentRoutine();
+    hideAddExerciseModal();
 }
