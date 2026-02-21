@@ -42,6 +42,7 @@ let currentRoutine = {};
 let isEditMode = false;
 
 function initRoutine() {
+    document.getElementById('connectionStatus').innerText = "JS v5.1 Cargado OK";
     const saved = localStorage.getItem('gym_custom_routine');
     if (saved) {
         currentRoutine = JSON.parse(saved);

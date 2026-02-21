@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=5.1">
 
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -27,8 +27,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>Gym Tracker <span style="font-size: 0.6em; color: var(--text-secondary);">v4.0</span></h1>
-            <div id="connectionStatus"></div>
+            <h1>Gym Tracker <span style="font-size: 0.6em; color: var(--text-secondary);">v5.1</span></h1>
+            <div id="connectionStatus" style="font-size: 0.7em; color: var(--accent-color);"></div>
         </header>
 
         <div class="date-selector">
@@ -90,8 +90,9 @@
         </button>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=5.1"></script>
     <script>
+        document.getElementById('connectionStatus').innerText = "Cargando JS...";
         // DESACTIVAR SERVICE WORKER (Para resolver problemas de caché)
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function (registrations) {
