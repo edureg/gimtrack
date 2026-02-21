@@ -133,9 +133,13 @@ h1 {
 
 .set-row {
     display: grid;
-    grid-template-columns: 30px 1fr 1fr 1fr 40px;
+    grid-template-columns: 30px 1fr 1fr 40px;
     gap: 8px;
     align-items: center;
+}
+
+.set-row.has-time {
+    grid-template-columns: 30px 1fr 1fr 1fr 40px;
 }
 
 .set-number {

@@ -42,7 +42,7 @@ let currentRoutine = {};
 let isEditMode = false;
 
 function initRoutine() {
-    document.getElementById('connectionStatus').innerText = "JS v5.1 Cargado OK";
+    document.getElementById('connectionStatus').innerText = "JS v7.0 Cargado OK";
     const saved = localStorage.getItem('gym_custom_routine');
     if (saved) {
         currentRoutine = JSON.parse(saved);
@@ -74,6 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('nextDay').addEventListener('click', () => changeDate(1));
     document.getElementById('exportBtn').addEventListener('click', exportCSV);
 
+    document.getElementById('addExerciseBtn').addEventListener('click', showAddExerciseModal);
+    document.getElementById('cancelAddEx').addEventListener('click', hideAddExerciseModal);
     document.getElementById('confirmAddEx').addEventListener('click', confirmAddExercise);
     document.getElementById('toggleEditModeBtn').addEventListener('click', toggleEditMode);
     document.getElementById('importFile').addEventListener('change', importCSV);
@@ -182,7 +184,7 @@ function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
         }
 
         setsHtml += `
-            <div class="set-row">
+            <div class="set-row ${exercise.hasTime ? 'has-time' : ''}">
                 <span class="set-number">#${i}</span>
                 <div class="input-group">
                     <input type="number" placeholder="-" 
@@ -202,6 +204,7 @@ function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
                         onchange="saveData('${exercise.id}', ${i}, 'weight', this.value)">
                     <label>Kg</label>
                 </div>
+                ${exercise.hasTime ? `
                 <div class="input-group">
                     <input type="number" placeholder="-" 
                         value="${timeVal}" 
@@ -209,8 +212,8 @@ function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
                         data-ex="${exercise.id}" 
                         data-set="${i}"
                         onchange="saveData('${exercise.id}', ${i}, 'time', this.value)">
-                    <label>Segs</label>
-                </div>
+                    <label>Tiempo</label>
+                </div>` : ''}
                 <button class="check-btn ${isDone ? 'completed' : ''}" 
                     onclick="toggleSet('${exercise.id}', ${i}, this)">
                     <i class="fas fa-check"></i>
@@ -535,6 +538,7 @@ function showAddExerciseModal() {
     document.getElementById('newExName').value = '';
     document.getElementById('newExNotes').value = '';
     document.getElementById('newExSets').value = '4';
+    document.getElementById('newExHasTime').checked = false;
     document.getElementById('addExerciseModal').style.display = 'flex';
 }
 
@@ -546,6 +550,7 @@ function confirmAddExercise() {
     const name = document.getElementById('newExName').value.trim();
     const notes = document.getElementById('newExNotes').value.trim();
     const sets = parseInt(document.getElementById('newExSets').value) || 4;
+    const hasTime = document.getElementById('newExHasTime').checked;
 
     if (!name) {
         alert("El nombre del ejercicio es obligatorio.");
@@ -564,7 +569,8 @@ function confirmAddExercise() {
         name: name,
         notes: notes,
         sets: sets,
-        rephs: "-"
+        rephs: "-",
+        hasTime: hasTime
     });
 
     saveCurrentRoutine();
