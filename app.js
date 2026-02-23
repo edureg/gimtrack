@@ -42,7 +42,7 @@ let currentRoutine = {};
 let isEditMode = false;
 
 function initRoutine() {
-    document.getElementById('connectionStatus').innerText = "JS v8.0 Cargado OK";
+    document.getElementById('connectionStatus').innerText = "JS v8.1 Cargado OK";
     const saved = localStorage.getItem('gym_custom_routine');
     if (saved) {
         currentRoutine = JSON.parse(saved);
@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('confirmAddEx').addEventListener('click', confirmAddExercise);
     document.getElementById('toggleEditModeBtn').addEventListener('click', toggleEditMode);
     document.getElementById('importFile').addEventListener('change', importCSV);
-    if(typeof initTimer === 'function') initTimer();
+    if (typeof initTimer === 'function') initTimer();
 });
 
 function toggleEditMode() {
@@ -132,6 +132,12 @@ function loadRoutine() {
     // Recuperar datos guardados
     const storageKey = getStorageKey(currentDate);
     const savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
+
+    // Cargar nota general del día
+    const dayNoteElement = document.getElementById('dayGeneralNote');
+    if (dayNoteElement) {
+        dayNoteElement.value = savedData._day_note_ || '';
+    }
 
     if (!routine || !routine.exercises || routine.exercises.length === 0) {
         dayHeader.textContent = routine ? routine.title : "Día de Descanso";
@@ -277,6 +283,13 @@ function saveSessionNote(exId, value) {
     localStorage.setItem(storageKey, JSON.stringify(data));
 }
 
+function saveDayNote(value) {
+    const storageKey = getStorageKey(currentDate);
+    const data = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    data._day_note_ = value;
+    localStorage.setItem(storageKey, JSON.stringify(data));
+}
+
 function toggleSet(exId, setIdx, btn) {
     const storageKey = getStorageKey(currentDate);
     const data = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -295,7 +308,7 @@ function toggleSet(exId, setIdx, btn) {
 
 function exportCSV() {
     let csvRows = [];
-    const header = "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg),Tiempo (s),Notas";
+    const header = "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg),Tiempo (s),Notas,Nota General";
 
     // Obtener y ordenar claves por fecha
     const keys = Object.keys(localStorage)
@@ -306,8 +319,12 @@ function exportCSV() {
         const dateStr = key.replace('gym_log_', '');
         const data = JSON.parse(localStorage.getItem(key));
 
+        const dayNoteRaw = data._day_note_ || '';
+        const dayNoteStr = dayNoteRaw.replace(/"/g, '""');
+
         // Buscar nombres de ejercicios
         Object.keys(data).forEach(exId => {
+            if (exId === '_day_note_') return;
             const sets = data[exId];
             let exName = exId; // Fallback
 
@@ -325,7 +342,7 @@ function exportCSV() {
                 const noteStr = sets.note ? sets.note.replace(/"/g, '""') : '';
                 // Exportar si tiene datos o está marcado como hecho
                 if (s.reps || s.weight || s.time || s.done) {
-                    csvRows.push(`${dateStr},"${exName}",${setIdx},${s.reps || 0},${s.weight || 0},${s.time || 0},"${noteStr}"`);
+                    csvRows.push(`${dateStr},"${exName}",${setIdx},${s.reps || 0},${s.weight || 0},${s.time || 0},"${noteStr}","${dayNoteStr}"`);
                 }
             });
         });
@@ -393,6 +410,7 @@ function importCSV(event) {
                 const weight = parseFloat(matches[4]);
                 const time = matches.length >= 6 ? parseInt(matches[5]) : 0;
                 const note = matches.length >= 7 ? matches[6] : '';
+                const dayNote = matches.length >= 8 ? matches[7] : '';
 
                 // Necesitamos el ID del ejercicio. Como el CSV solo exporta el nombre,  
                 // debemos buscar a qué ID corresponde ese nombre en la configuración.
@@ -424,6 +442,11 @@ function importCSV(event) {
                 // Solo sobreescribir si NO hay datos previamente cargados (para no duplicar o borrar progreso actual en caso de conflicto)
                 // Opcional: Podríamos sobreescribir siempre, pero para más seguridad y "no duplicar/pisar" información:
                 const existing = data[exId][setIdx] || {};
+
+                if (dayNote && !data._day_note_) {
+                    data._day_note_ = dayNote;
+                }
+
                 if (!existing.reps && !existing.weight && !existing.time && !existing.done) {
                     data[exId][setIdx] = {
                         reps: reps || '',
@@ -602,6 +625,30 @@ let timerInterval;
 let timerTime = 120; // 2 minutes in seconds
 let isTimerRunning = false;
 
+const playBeep = () => {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+
+        const playObj = (freq, time, type) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + time);
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + time + 0.3);
+            osc.stop(ctx.currentTime + time + 0.3);
+        };
+
+        playObj(800, 0, 'sine');
+        playObj(1000, 0.2, 'sine');
+        playObj(1200, 0.4, 'sine');
+    } catch (e) { console.error("Error playing beep", e); }
+};
+
 function initTimer() {
     const timerFabBtn = document.getElementById('timerFabBtn');
     const timerPanel = document.getElementById('timerPanel');
@@ -649,7 +696,7 @@ function initTimer() {
             timerToggleBtn.innerHTML = '<i class="fas fa-pause"></i>';
             timerToggleBtn.style.background = 'var(--danger-color)';
             timerToggleBtn.style.color = '#fff';
-            
+
             timerInterval = setInterval(() => {
                 timerTime--;
                 if (timerTime <= 0) {
@@ -659,7 +706,8 @@ function initTimer() {
                     timerToggleBtn.innerHTML = '<i class="fas fa-play"></i>';
                     timerToggleBtn.style.background = 'var(--accent-color)';
                     timerToggleBtn.style.color = '#000';
-                    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); } catch(e) {}
+                    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); } catch (e) { }
+                    playBeep();
                 }
                 updateDisplay();
             }, 1000);
