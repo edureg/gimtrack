@@ -460,3 +460,125 @@ input[type=number]::-webkit-outer-spin-button {
     font-size: 0.85rem;
     color: var(--text-secondary);
 }
+
+/* Session Notes */
+.session-note-group {
+    margin-top: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+.session-note-group input {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+    padding-left: 32px;
+    width: 100%;
+}
+
+.session-note-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.session-note-group i {
+    position: absolute;
+    left: 10px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    pointer-events: none;
+}
+
+/* Timer Panel */
+.timer-panel {
+    position: fixed;
+    bottom: 90px;
+    right: 24px;
+    background: var(--card-bg);
+    border: var(--card-border);
+    border-radius: 16px;
+    padding: 16px;
+    backdrop-filter: var(--glass-effect);
+    z-index: 101;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 220px;
+    animation: fadeIn 0.3s ease;
+}
+
+.timer-header {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    align-items: center;
+    margin-bottom: 12px;
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+.timer-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.timer-display {
+    font-size: 2.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 16px;
+    color: #fff;
+    text-shadow: var(--accent-glow);
+}
+
+.timer-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.timer-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.timer-btn:active {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.timer-btn.primary {
+    background: var(--accent-color);
+    color: #000;
+    font-size: 1.2rem;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.timer-reset {
+    background: transparent;
+    border: 1px solid var(--text-secondary);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}

@@ -42,7 +42,7 @@ let currentRoutine = {};
 let isEditMode = false;
 
 function initRoutine() {
-    document.getElementById('connectionStatus').innerText = "JS v7.0 Cargado OK";
+    document.getElementById('connectionStatus').innerText = "JS v8.0 Cargado OK";
     const saved = localStorage.getItem('gym_custom_routine');
     if (saved) {
         currentRoutine = JSON.parse(saved);
@@ -79,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('confirmAddEx').addEventListener('click', confirmAddExercise);
     document.getElementById('toggleEditModeBtn').addEventListener('click', toggleEditMode);
     document.getElementById('importFile').addEventListener('change', importCSV);
+    if(typeof initTimer === 'function') initTimer();
 });
 
 function toggleEditMode() {
@@ -156,6 +157,7 @@ function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
 
     // Obtener datos de la sesión anterior
     const lastSessionData = getLastSessionData(exercise.id);
+    const sessionNote = savedExData.note || '';
 
     let setsHtml = '';
     for (let i = 1; i <= exercise.sets; i++) {
@@ -231,6 +233,12 @@ function createExerciseCard(exercise, savedExData, dayIndex, exIndex) {
             </div>
             ${exercise.notes ? `<div class="exercise-notes">${exercise.notes}</div>` : ''}
             ${lastSessionData ? `<div class="last-session-date">Ult. vez: ${lastSessionData.date}</div>` : ''}
+            <div class="input-group session-note-group">
+                <i class="fas fa-pen"></i>
+                <input type="text" placeholder="Añadir nota para hoy (ej. molestias)..." 
+                    value="${sessionNote}" 
+                    onchange="saveSessionNote('${exercise.id}', this.value)">
+            </div>
         </div>
         <div class="sets-controls">
             <button class="sets-btn" onclick="changeSets(${dayIndex}, ${exIndex}, -1)"><i class="fas fa-minus"></i></button>
@@ -261,6 +269,14 @@ function saveData(exId, setIdx, field, value) {
     localStorage.setItem(storageKey, JSON.stringify(data));
 }
 
+function saveSessionNote(exId, value) {
+    const storageKey = getStorageKey(currentDate);
+    const data = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    if (!data[exId]) data[exId] = {};
+    data[exId].note = value;
+    localStorage.setItem(storageKey, JSON.stringify(data));
+}
+
 function toggleSet(exId, setIdx, btn) {
     const storageKey = getStorageKey(currentDate);
     const data = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -279,7 +295,7 @@ function toggleSet(exId, setIdx, btn) {
 
 function exportCSV() {
     let csvRows = [];
-    const header = "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg),Tiempo (s)";
+    const header = "Fecha,Ejercicio,Serie,Repeticiones,Peso (kg),Tiempo (s),Notas";
 
     // Obtener y ordenar claves por fecha
     const keys = Object.keys(localStorage)
@@ -304,10 +320,12 @@ function exportCSV() {
             });
 
             Object.keys(sets).forEach(setIdx => {
+                if (setIdx === 'note' || setIdx === 'done') return;
                 const s = sets[setIdx];
+                const noteStr = sets.note ? sets.note.replace(/"/g, '""') : '';
                 // Exportar si tiene datos o está marcado como hecho
                 if (s.reps || s.weight || s.time || s.done) {
-                    csvRows.push(`${dateStr},"${exName}",${setIdx},${s.reps || 0},${s.weight || 0},${s.time || 0}`);
+                    csvRows.push(`${dateStr},"${exName}",${setIdx},${s.reps || 0},${s.weight || 0},${s.time || 0},"${noteStr}"`);
                 }
             });
         });
@@ -374,8 +392,9 @@ function importCSV(event) {
                 const reps = parseInt(matches[3]);
                 const weight = parseFloat(matches[4]);
                 const time = matches.length >= 6 ? parseInt(matches[5]) : 0;
+                const note = matches.length >= 7 ? matches[6] : '';
 
-                // Necesitamos el ID del ejercicio. Como el CSV solo exporta el nombre, 
+                // Necesitamos el ID del ejercicio. Como el CSV solo exporta el nombre,  
                 // debemos buscar a qué ID corresponde ese nombre en la configuración.
                 let exId = null;
                 [0, 1, 2, 3, 4, 5, 6].forEach(d => {
@@ -404,7 +423,7 @@ function importCSV(event) {
 
                 // Solo sobreescribir si NO hay datos previamente cargados (para no duplicar o borrar progreso actual en caso de conflicto)
                 // Opcional: Podríamos sobreescribir siempre, pero para más seguridad y "no duplicar/pisar" información:
-                const existing = data[exId][setIdx];
+                const existing = data[exId][setIdx] || {};
                 if (!existing.reps && !existing.weight && !existing.time && !existing.done) {
                     data[exId][setIdx] = {
                         reps: reps || '',
@@ -412,6 +431,7 @@ function importCSV(event) {
                         time: time || '',
                         done: (reps > 0 || weight > 0 || time > 0)
                     };
+                    if (note) data[exId].note = note;
                     localStorage.setItem(storageKey, JSON.stringify(data));
                     importedCount++;
                 }
@@ -576,3 +596,98 @@ function confirmAddExercise() {
     saveCurrentRoutine();
     hideAddExerciseModal();
 }
+
+// Lógica de Temporizador
+let timerInterval;
+let timerTime = 120; // 2 minutes in seconds
+let isTimerRunning = false;
+
+function initTimer() {
+    const timerFabBtn = document.getElementById('timerFabBtn');
+    const timerPanel = document.getElementById('timerPanel');
+    const closeTimerBtn = document.getElementById('closeTimerBtn');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const timerSubBtn = document.getElementById('timerSubBtn');
+    const timerAddBtn = document.getElementById('timerAddBtn');
+    const timerToggleBtn = document.getElementById('timerToggleBtn');
+    const timerResetBtn = document.getElementById('timerResetBtn');
+
+    if (!timerFabBtn || !timerPanel) return;
+
+    function formatTime(seconds) {
+        if (seconds < 0) seconds = 0;
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function updateDisplay() {
+        timerDisplay.textContent = formatTime(timerTime);
+    }
+
+    function toggleTimerPanel() {
+        if (timerPanel.style.display === 'none' || timerPanel.style.display === '') {
+            timerPanel.style.display = 'flex';
+        } else {
+            timerPanel.style.display = 'none';
+        }
+    }
+
+    timerFabBtn.addEventListener('click', toggleTimerPanel);
+    closeTimerBtn.addEventListener('click', () => timerPanel.style.display = 'none');
+
+    timerToggleBtn.addEventListener('click', () => {
+        if (isTimerRunning) {
+            clearInterval(timerInterval);
+            timerToggleBtn.innerHTML = '<i class="fas fa-play"></i>';
+            timerToggleBtn.style.background = 'var(--accent-color)';
+            timerToggleBtn.style.color = '#000';
+            isTimerRunning = false;
+        } else {
+            if (timerTime <= 0) timerTime = 120; // reset if 0
+            isTimerRunning = true;
+            timerToggleBtn.innerHTML = '<i class="fas fa-pause"></i>';
+            timerToggleBtn.style.background = 'var(--danger-color)';
+            timerToggleBtn.style.color = '#fff';
+            
+            timerInterval = setInterval(() => {
+                timerTime--;
+                if (timerTime <= 0) {
+                    timerTime = 0;
+                    clearInterval(timerInterval);
+                    isTimerRunning = false;
+                    timerToggleBtn.innerHTML = '<i class="fas fa-play"></i>';
+                    timerToggleBtn.style.background = 'var(--accent-color)';
+                    timerToggleBtn.style.color = '#000';
+                    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); } catch(e) {}
+                }
+                updateDisplay();
+            }, 1000);
+        }
+    });
+
+    timerSubBtn.addEventListener('click', () => {
+        timerTime = Math.max(0, timerTime - 30);
+        updateDisplay();
+    });
+
+    timerAddBtn.addEventListener('click', () => {
+        timerTime += 30;
+        updateDisplay();
+    });
+
+    timerResetBtn.addEventListener('click', () => {
+        timerTime = 120; // reset to 2:00
+        updateDisplay();
+        if (isTimerRunning) {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            timerToggleBtn.innerHTML = '<i class="fas fa-play"></i>';
+            timerToggleBtn.style.background = 'var(--accent-color)';
+            timerToggleBtn.style.color = '#000';
+        }
+    });
+
+    updateDisplay();
+}
+
